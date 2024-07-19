@@ -136,20 +136,29 @@ def get_song_ids(files, spotify):
         sanitized_artist, sanitized_title = processed
         
         
+        # Replace '-' and '_' with spaces
         sanitized_title = sanitized_title.replace('-', ' ').replace('_', ' ').replace('.', ' ').replace(',', ' ').replace('&', ' ').replace('feat ', ' ')
         sanitized_artist = sanitized_artist.replace('-', ' ').replace('_', ' ').replace('.', ' ').replace(',', ' ').replace('&', ' ').replace('feat ', ' ')
+        # Define a regex pattern to match URLs
+        url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+|www[a-zA-Z0-9.-]+'
 
+        # Replace URLs with an empty string
+        sanitized_title = re.sub(url_pattern, '', sanitized_title)
+        sanitized_artist = re.sub(url_pattern, '', sanitized_artist)
+
+        # Remove "remastered" designation and common words
         sanitized_title = re.sub(r'\([^)]*remaster(ed)?[^)]*\)$', '', sanitized_title, flags=re.IGNORECASE)
         sanitized_title = re.sub(r'\b(feat|ft|with)\b\.?\s*', '', sanitized_title, flags=re.IGNORECASE)
         
         print(f"Sanitized: {sanitized_artist} - {sanitized_title}")
 
+        # Split artists for multiple artist tracks
         artists = [artist.strip() for artist in sanitized_artist.split(',')]
 
+        # Try different search combinations
         search_queries = [
             f"artist:{' '.join(artists)} track:{sanitized_title}",
             f"artist:{artists[0]} track:{sanitized_title}",
-            f"track:{sanitized_title}",
             f"{' '.join(artists)} {sanitized_title}"
         ]
 
@@ -160,17 +169,18 @@ def get_song_ids(files, spotify):
                 tracks = track_query['tracks']['items']
                 
                 if tracks:
+                    # Use fuzzy matching to find the best match
                     best_match = max(tracks, key=lambda x: fuzz.partial_ratio(
                         f"{sanitized_title}".lower(),
                         f"{x['name']}".lower()
                     ))
-                    
-                    if fuzz.partial_ratio(
-                        f"{sanitized_artist} {sanitized_title}".lower(),
-                        f"{best_match['artists'][0]['name']} {best_match['name']}".lower()
-                    ) > 75:  # Adjusted threshold
+                    print(f"checking {sanitized_artist} {sanitized_title}".lower())
+                    if ((fuzz.partial_ratio(f"{sanitized_artist} {sanitized_title}".lower(),f"{best_match['artists'][0]['name']} {best_match['name']}".lower()) > 50) or (fuzz.partial_ratio(f"{sanitized_artist}".lower(),f"{best_match['name']}".lower()) > 50) or (fuzz.partial_ratio(f"{sanitized_title}".lower(),f"{best_match['artists'][0]['name']}".lower()) > 50)):  # Adjusted threshold
+                        print(f"matched {best_match['artists'][0]['name']} {best_match['name']}".lower())
                         track_id = best_match['id']
                         break
+                    else:
+                        print(f"not matched {best_match['artists'][0]['name']} {best_match['name']}".lower())
             except SpotifyOauthError:
                 print("There was an error authenticating your Spotify account. Please try again.")
                 exit_routine()
