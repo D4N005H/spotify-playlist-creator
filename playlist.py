@@ -11,17 +11,22 @@ from mutagen.mp3 import MP3, HeaderNotFoundError
 from fuzzywuzzy import fuzz
 
 def sanitize_string(input_string):
+    # Remove non-ASCII characters and normalize
     normalized = unicodedata.normalize('NFKD', input_string).encode('ASCII', 'ignore').decode('ASCII')
+    # Remove any remaining non-alphanumeric characters except spaces
     sanitized = re.sub(r'[^a-zA-Z0-9\s]', '', normalized)
     return sanitized.strip()
 
 def main():
+    # Replace these two variables with your own id values.
     client_id = "PLACEHOLDER"
     client_secret = "PLACEHOLDER"
 
+    # Get user input and MP3 files.
     playlist_name, playlist_status, files = get_input()
     redirect_uri = "https://open.spotify.com/"
 
+    # Determine API scope depending upon whether the playlist is public or private.
     if playlist_status.lower() == 'y':
         scope = 'playlist-modify-public'
         is_public = True
@@ -29,25 +34,32 @@ def main():
         scope = "playlist-modify-private"
         is_public = False
 
+    # Get access to the Spotify API using the Authorization Code Flow.
     spotify = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=client_id, client_secret=client_secret,
                                                         redirect_uri=redirect_uri, scope=scope))
 
+    # Look up each song using the Spotify API.
     track_ids, manual_check_list, not_found_list, no_metadata_list = get_song_ids(files, spotify)
 
+    # If there are no tracks in the tracks_ids list, exit the script.
     if len(track_ids) == 0:
         print("No valid tracks are available to add to the playlist. The script will now close.\n")
         exit_routine()
 
+    # Get access to the current user and create a new playlist.
     user = spotify.current_user()
     user_id = user['id']
     playlist = spotify.user_playlist_create(user=user_id, name=playlist_name, public=is_public)
     print(f"\n\"{playlist_name}\" playlist created successfully.")
 
+    # Get the newly created playlist's ID and then add all the tracks to it.
     playlist_id = playlist["id"]
 
+    # Add tracks in batches of 100
     for i in range(0, len(track_ids), 100):
         spotify.playlist_add_items(playlist_id=playlist_id, items=track_ids[i:i+100])
 
+    # Inform user of errors that occurred, and then exit.
     print_errors(manual_check_list, not_found_list, no_metadata_list)
     print("\nScript complete! For more detailed information on what was done, along with potential issues that may "
           "have occurred, see the console output above. Thank you for using the Spotify Playlist Creator.")
@@ -76,7 +88,7 @@ def get_input():
     return playlist_name, playlist_status, files
 
 def clean_tag(tag):
-    tag = re.sub(r'\s*\((Original Mix|Official Audio|Remix)\)', '', tag, flags=re.IGNORECASE) # Add any non-relevant string from your MP3 files to this line, eg. artist - music name (Original Mix) would be "artist - music name" resulting more chance of successful search
+    tag = re.sub(r'\s*\((Original Mix|Official Audio|Official Lyric|Official Music|lyrics)\)', '', tag, flags=re.IGNORECASE) # Add more strings to be ignored here
     tag = re.sub(r'\s*\[[^\]]+\]', '', tag)
     tag = tag.replace('_', ' ')
     tag = re.sub(r'\s+', ' ', tag)
@@ -103,6 +115,7 @@ def process_mp3_tag(artist, track):
     if not artist:
         return None
         
+    # Check if artist has no alphabetical characters in any language
     if not any(char.isalpha() for char in artist):
         return None
     
@@ -139,12 +152,6 @@ def get_song_ids(files, spotify):
         # Replace '-' and '_' with spaces
         sanitized_title = sanitized_title.replace('-', ' ').replace('_', ' ').replace('.', ' ').replace(',', ' ').replace('&', ' ').replace('feat ', ' ')
         sanitized_artist = sanitized_artist.replace('-', ' ').replace('_', ' ').replace('.', ' ').replace(',', ' ').replace('&', ' ').replace('feat ', ' ')
-        # Define a regex pattern to match URLs
-        url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+|www[a-zA-Z0-9.-]+'
-
-        # Replace URLs with an empty string
-        sanitized_title = re.sub(url_pattern, '', sanitized_title)
-        sanitized_artist = re.sub(url_pattern, '', sanitized_artist)
 
         # Remove "remastered" designation and common words
         sanitized_title = re.sub(r'\([^)]*remaster(ed)?[^)]*\)$', '', sanitized_title, flags=re.IGNORECASE)
@@ -165,7 +172,7 @@ def get_song_ids(files, spotify):
         track_id = None
         for query in search_queries:
             try:
-                track_query = spotify.search(q=clean_query(query), limit=10)
+                track_query = spotify.search(q=clean_query(query), limit=5)
                 tracks = track_query['tracks']['items']
                 
                 if tracks:
@@ -175,7 +182,7 @@ def get_song_ids(files, spotify):
                         f"{x['name']}".lower()
                     ))
                     print(f"checking {sanitized_artist} {sanitized_title}".lower())
-                    if ((fuzz.partial_ratio(f"{sanitized_artist} {sanitized_title}".lower(),f"{best_match['artists'][0]['name']} {best_match['name']}".lower()) > 50) or (fuzz.partial_ratio(f"{sanitized_artist}".lower(),f"{best_match['name']}".lower()) > 50) or (fuzz.partial_ratio(f"{sanitized_title}".lower(),f"{best_match['artists'][0]['name']}".lower()) > 50)):  # Adjusted threshold
+                    if ((fuzz.partial_ratio(f"{sanitized_artist} {sanitized_title}".lower(),f"{best_match['artists'][0]['name']} {best_match['name']}".lower()) > 50) or (fuzz.partial_ratio(f"{sanitized_artist}".lower(),f"{best_match['name']}".lower()) > 50) or (fuzz.partial_ratio(f"{sanitized_title}".lower(),f"{best_match['artists'][0]['name']}".lower()) > 62)):  # Adjusted threshold
                         print(f"matched {best_match['artists'][0]['name']} {best_match['name']}".lower())
                         track_id = best_match['id']
                         break
@@ -193,7 +200,9 @@ def get_song_ids(files, spotify):
     return track_id_list, manual_check_list, not_found_list, no_metadata_list
 
 def clean_query(query):
+    # Remove or replace special characters
     cleaned = re.sub(r'[^\w\s]', '', query)
+    # Remove extra whitespace
     cleaned = ' '.join(cleaned.split())
     return cleaned
 
