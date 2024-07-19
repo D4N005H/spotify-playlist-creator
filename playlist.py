@@ -182,7 +182,7 @@ def get_song_ids(files, spotify):
                         f"{x['name']}".lower()
                     ))
                     print(f"checking {sanitized_artist} {sanitized_title}".lower())
-                    if ((fuzz.partial_ratio(f"{sanitized_artist} {sanitized_title}".lower(),f"{best_match['artists'][0]['name']} {best_match['name']}".lower()) > 50) or (fuzz.partial_ratio(f"{sanitized_artist}".lower(),f"{best_match['name']}".lower()) > 50) or (fuzz.partial_ratio(f"{sanitized_title}".lower(),f"{best_match['artists'][0]['name']}".lower()) > 62)):  # Adjusted threshold
+                    if ((fuzz.partial_ratio(f"{sanitized_artist} {sanitized_title}".lower(),f"{best_match['artists'][0]['name']} {best_match['name']}".lower()) > 75) or (fuzz.partial_ratio(f"{sanitized_artist}".lower(),f"{best_match['name']}".lower()) > 62) or (fuzz.partial_ratio(f"{sanitized_title}".lower(),f"{best_match['artists'][0]['name']}".lower()) > 62)):  # Adjusted threshold
                         print(f"matched {best_match['artists'][0]['name']} {best_match['name']}".lower())
                         track_id = best_match['id']
                         break
